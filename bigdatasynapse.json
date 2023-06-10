@@ -1,0 +1,156 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "sqlAdministratorLoginPassword": {
+            "type": "String",
+            "metadata": {
+                "description": "Password for SQL Admin"
+            }
+        }
+    },
+    "variables": {
+        "workspaceName": "[concat('bigdatasynapsespace', uniqueString(resourceGroup().id))]",
+        "location": "[resourceGroup().location]",
+        "bigdatalakestorageacc": "[concat('bdstorage', uniqueString(resourceGroup().id))]",
+        "defaultDataLakeStorageFilesystemName": "tempdata",
+        "defaultDataLakeStorageAccountUrl": "[concat('https://', variables('bigdatalakestorageacc'), '.dfs.core.windows.net')]",
+        "computeSubnetId": "",
+        "sqlAdministratorLogin": "sqladminuser",
+        "sparkComputeName": "bigdataspark",
+        "sparkNodeCount": "0",
+        "sparkNodeSizeFamily": "MemoryOptimized",
+        "sparkNodeSize": "Small",
+        "sparkAutoScaleEnabled": "true",
+        "sparkMinNodeCount": "3",
+        "sparkMaxNodeCount": "4",
+        "sparkAutoPauseEnabled": "true",
+        "sparkAutoPauseDelayInMinutes": "15",
+        "sparkVersion": "2.4",
+        "sqlComputeName": "bigdatasql",
+        "sqlServerSKU": "DW100c",
+        "cosmosDbAccountName": "[concat('big-data-', uniqueString(resourceGroup().id))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Synapse/workspaces",
+            "apiVersion": "2019-06-01-preview",
+            "name": "[variables('workspaceName')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Storage/storageAccounts/', variables('bigdatalakestorageacc'), '/blobServices/default/containers/', variables('defaultDataLakeStorageFilesystemName'))]"
+            ],
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "defaultDataLakeStorage": {
+                    "accountUrl": "[variables('defaultDataLakeStorageAccountUrl')]",
+                    "filesystem": "[variables('defaultDataLakeStorageFilesystemName')]"
+                },
+                "virtualNetworkProfile": {
+                    "computeSubnetId": "[variables('computeSubnetId')]"
+                },
+                "sqlAdministratorLogin": "[variables('sqlAdministratorLogin')]",
+                "sqlAdministratorLoginPassword": "[parameters('sqlAdministratorLoginPassword')]"
+            },
+            "resources": [
+                {
+                    "type": "firewallrules",
+                    "apiVersion": "2019-06-01-preview",
+                    "name": "allowAll",
+                    "location": "[variables('location')]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Synapse/workspaces/', variables('workspaceName'))]"
+                    ],
+                    "properties": {
+                        "startIpAddress": "0.0.0.0",
+                        "endIpAddress": "255.255.255.255"
+                    }
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Synapse/workspaces/bigDataPools",
+            "apiVersion": "2019-06-01-preview",
+            "name": "[concat(variables('workspaceName'), '/', variables('sparkComputeName'))]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Synapse/workspaces/', variables('workspaceName'))]"
+            ],
+            "properties": {
+                "nodeCount": "[variables('sparkNodeCount')]",
+                "nodeSizeFamily": "[variables('sparkNodeSizeFamily')]",
+                "nodeSize": "[variables('sparkNodeSize')]",
+                "autoScale": {
+                    "enabled": "[variables('sparkAutoScaleEnabled')]",
+                    "minNodeCount": "[variables('sparkMinNodeCount')]",
+                    "maxNodeCount": "[variables('sparkMaxNodeCount')]"
+                },
+                "autoPause": {
+                    "enabled": "[variables('sparkAutoPauseEnabled')]",
+                    "delayInMinutes": "[variables('sparkAutoPauseDelayInMinutes')]"
+                },
+                "sparkVersion": "[variables('sparkVersion')]"
+            }
+        },
+        {
+            "type": "Microsoft.Synapse/workspaces/sqlPools",
+            "apiVersion": "2019-06-01-preview",
+            "name": "[concat(variables('workspaceName'), '/', variables('sqlComputeName'))]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Synapse/workspaces/', variables('workspaceName'))]",
+                "[concat('Microsoft.Synapse/workspaces/', variables('workspaceName'), '/bigDataPools/', variables('sparkComputeName'))]"
+            ],
+            "sku": {
+                "name": "[variables('sqlServerSKU')]"
+            },
+            "properties": {
+                "createMode": "Default",
+                "collation": "SQL_Latin1_General_CP1_CI_AS"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('bigdatalakestorageacc')]",
+            "location": "[variables('location')]",
+            "dependsOn": [],
+            "tags": {},
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "accessTier": "Hot",
+                "supportsHttpsTrafficOnly": "true",
+                "isHnsEnabled": "true",
+                "largeFileSharesState": "Disabled"
+            },
+            "resources": [
+                {
+                    "type": "blobServices/containers",
+                    "apiVersion": "2018-07-01",
+                    "name": "[concat('default/', variables('defaultDataLakeStorageFilesystemName'))]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Storage/storageAccounts/', variables('bigdatalakestorageacc'))]"
+                    ],
+                    "sku": {
+                        "name": "Standard_LRS",
+                        "tier": "Standard"
+                    },
+                    "properties": {
+                        "cors": {
+                            "corsRules": []
+                        },
+                        "deleteRetentionPolicy": {
+                            "enabled": false
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "outputs": {}
+}
