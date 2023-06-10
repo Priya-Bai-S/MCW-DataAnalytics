@@ -56,7 +56,7 @@ $cred = new-object -typename System.Management.Automation.PSCredential -argument
 
 Connect-AzAccount -Credential $cred | Out-Null
 
-$resourceGroupName = (Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -like "*BigData-$deploymentId*" }).ResourceGroupName
+$resourceGroupName = (Get-AzResourceGroup | Where-Object { $_.ResourceGroupName -like "*DataAnalytics-$deploymentId*" }).ResourceGroupName
 $deploymentId =  (Get-AzResourceGroup -Name $resourceGroupName).Tags["DeploymentId"]
 
 New-AzResourceGroupDeployment -ResourceGroupName $resourceGroupName -TemplateUri "https://github.com/Priya-Bai-S/MCW-DataAnalytics/blob/main/bigdatasynapse.json" -TemplateParameterUri "https://github.com/Priya-Bai-S/MCW-DataAnalytics/blob/main/synapseparam.json"
