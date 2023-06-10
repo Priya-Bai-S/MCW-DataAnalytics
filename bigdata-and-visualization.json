@@ -1,0 +1,819 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "sqlAdministratorLoginPassword": {
+            "type": "String",
+            "metadata": {
+                "description": "Password for SQL Admin"
+            }
+        },
+        "adminUsername": {
+            "type": "String"
+        },
+        "adminPassword": {
+            "type": "SecureString"
+        },
+        "AzureUserName": {
+            "type": "String"
+        },
+        "AzurePassword": {
+            "type": "SecureString"
+        },
+        "ODLID": {
+            "type": "String"
+        },
+        "DeploymentID": {
+            "type": "String"
+        },
+        "azuserobjectid": {
+        "type": "String",
+        "metadata": {
+            "description": "The Object Id associated with the account you used to sign into the Azure portal. Retrieve this using the Azure CLI and 'az ad signed-in-user show --query objectId -o tsv'."
+        }
+      },
+     "serverName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the PostgreSQL server."
+      }
+    },
+    "administratorLogin": {
+      "type": "string",
+      "metadata": {
+        "description": "The administrator username for the PostgreSQL server."
+      }
+    },
+    "administratorLoginPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The administrator password for the PostgreSQL server."
+      }
+    },
+    "databaseName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the PostgreSQL database."
+      }
+    },
+    "skuName": {
+      "type": "string",
+      "defaultValue": "GP_Gen5_2",
+      "metadata": {
+        "description": "The SKU name for the PostgreSQL server."
+      }
+    },
+     "VMUsername": {
+        "type": "string",
+        "defaultValue": "demouser"
+      },
+      
+        "uniqueSuffix": {
+            "type": "String",
+            "metadata": {
+                "description": "Suffix added to all resource names to make them unique."
+            }
+        }
+    },
+    "variables": {
+        "cloudlabsCommon": "[concat(' -AzureUserName ', parameters('AzureUserName'), ' -AzurePassword ', parameters('AzurePassword'), ' -AzureTenantID ', variables('AzureTenantID'), ' -AzureSubscriptionID ', variables('AzureSubscriptionID'), ' -ODLID ', parameters('ODLID'), ' -DeploymentID ', parameters('DeploymentID'), ' -azuserobjectid ', parameters('azuserobjectid'))]",
+        "Enable-CloudLabsEmbeddedShadow": "[concat(' -adminUsername ', parameters('adminUsername'), ' -adminPassword ', parameters('adminPassword'))]",
+        "AzureSubscriptionID": "[subscription().subscriptionId]",
+        "AzureTenantID": "[subscription().tenantId]",
+        "virtualNetworkName": "vNet",
+        "rgName": "[resourceGroup().name]",
+        "vmName": "Test-LabVM",
+        "virtualMachineSize": "Standard_D2s_v3",
+        "networkInterfaceName": "[concat(variables('vmName'), '-nic')]",
+        "networkSecurityGroupName": "[concat(variables('vmName'), '-nsg')]",
+        "publicIpAddressName": "[concat(variables('vmName'), '-pip')]",
+        "publicIpAddressDNSName": "[concat('testvm-', parameters('DeploymentID'))]",
+        "subnetName": "subnet",
+        "subnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets/',variables('virtualNetworkName'), variables('subnetName'))]",
+        "location": "[resourceGroup().location]",      
+        "workspaceName": "[concat('workspace1', parameters('DeploymentID'))]",
+        "StorageAccountName": "[concat('bigdatastorage', parameters('DeploymentID'))]",
+        "defaultDataLakeStorageFilesystemName": "tempdata",
+        "keyVaultName": "[concat('keyvaultbigdatavis', parameters('DeploymentID'))]",
+        "blobStorageAccountName": "[concat('blobstoragemcw', parameters('DeploymentID'))]",
+        "applicationInsightsName": "[concat('appinsightsazmcw', parameters('DeploymentID'))]",
+        "cosmosDbAccountName": "[concat('bigdata-app-', parameters('DeploymentID'))]",
+        "mlWorkspaceName": "[concat('bigdata-app-', parameters('DeploymentID'))]",
+        "mlStorageName": "[concat('bigdataml', parameters('DeploymentID'))]",
+        "mlStorageAccountType": "Standard_LRS",
+        "containerRegistryName": "[concat('bigdataapp', parameters('DeploymentID'))]",
+        "eventHubNameSpace": "[concat('bigdata-app-',parameters('DeploymentID'))]",
+        "managedAccessPolicyName": "ManageAccessPolicy",
+        "streamAnalyticsName": "[concat('bigdata-app-stream', parameters('DeploymentID'))]",
+        "sqlComputeName": "bigdatasql",
+         "postgreserverUrl": "[concat(parameters('serverName'), '.postgres.database.azure.com')]",
+           "databricksWorkspaceName": "[concat('mcw-databricks-', parameters('uniqueSuffix'))]",
+           "dataFactoryName": "[concat('mcwdatafactoryadf-', parameters('uniqueSuffix'))]",
+        "managedResourceGroupName": "[concat('databricks-rg-', variables('databricksWorkspaceName'), '-', uniqueString(variables('databricksWorkspaceName'), resourceGroup().id))]",
+        "managedResourceGroupId": "[concat(subscription().id, '/resourceGroups/', variables('managedResourceGroupName'))]"
+        
+    },
+    "resources": [
+             {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2019-07-01",
+            "name": "[variables('vmName')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/networkInterfaces/', variables('networkInterfaceName'))]"
+            ],
+            "properties": {
+                "osProfile": {
+                    "computerName": "[variables('vmName')]",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]",
+                    "windowsConfiguration": {
+                        "provisionVmAgent": "true"
+                    }
+                },
+                "hardwareProfile": {
+                    "vmSize": "[variables('virtualMachineSize')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "MicrosoftWindowsServer",
+                        "offer": "WindowsServer",
+                        "sku": "2016-Datacenter",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "createOption": "FromImage",
+                        "name": "[concat(variables('vmName'), '-osdisk')]",
+                        "managedDisk": {
+                            "storageAccountType": "Premium_LRS"
+                        }
+                    },
+                    "dataDisks": []
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('networkInterfaceName'))]"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2019-07-01",
+            "name": "[variables('virtualNetworkName')]",
+            "location": "[variables('location')]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "10.100.0.0/16"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('subnetName')]",
+                        "properties": {
+                            "addressPrefix": "10.100.0.0/24"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2019-07-01",
+            "name": "[variables('networkInterfaceName')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]",
+                "[concat('Microsoft.Network/publicIpAddresses/', variables('publicIpAddressName'))]",
+                "[concat('Microsoft.Network/networkSecurityGroups/', variables('networkSecurityGroupName'))]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "subnet": {
+                                "id": "[variables('subnetRef')]"
+                            },
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIpAddress": {
+                                "id": "[resourceId(resourceGroup().name,'Microsoft.Network/publicIpAddresses', variables('publicIpAddressName'))]"
+                            }
+                        }
+                    }
+                ],
+                "networkSecurityGroup": {
+                    "id": "[resourceId(resourceGroup().name, 'Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/publicIpAddresses",
+            "apiVersion": "2019-07-01",
+            "name": "[variables('publicIpAddressName')]",
+            "location": "[variables('location')]",
+            "properties": {
+                "publicIpAllocationMethod": "Dynamic",
+                "dnsSettings": {
+                    "domainNameLabel": "[concat(variables('publicIpAddressDNSName'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2019-07-01",
+            "name": "[variables('networkSecurityGroupName')]",
+            "location": "[variables('location')]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "default-allow-rdp",
+                        "properties": {
+                            "priority": 1030,
+                            "protocol": "TCP",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "sourceAddressPrefix": "*",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "*",
+                            "destinationPortRange": "3389"
+                        }
+                    },
+                    {
+                        "name": "default-allow-http",
+                        "properties": {
+                            "priority": 100,
+                            "protocol": "TCP",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "sourceAddressPrefix": "*",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "*",
+                            "destinationPortRange": "80"
+                        }
+                    },
+                    {
+                        "name": "default-allow-https",
+                        "properties": {
+                            "priority": 300,
+                            "protocol": "TCP",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "sourceAddressPrefix": "*",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "*",
+                            "destinationPortRange": "443"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Databricks/workspaces",
+            "apiVersion": "2018-04-01",
+            "name": "[variables('databricksWorkspaceName')]",
+            "location": "[variables('location')]",
+            "dependsOn": [],
+            "sku": {
+                "name": "premium"
+            },
+            "properties": {
+                "ManagedResourceGroupId": "[variables('managedResourceGroupId')]",
+                "parameters": {}
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('blobStorageAccountName')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "encryption": {
+                    "services": {
+                        "blob": {
+                            "enabled": true
+                        },
+                        "file": {
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                },
+                "supportsHttpsTrafficOnly": true
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('blobStorageAccountName'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('blobStorageAccountName'))]"
+            ],
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                },
+                "deleteRetentionPolicy": {
+                    "enabled": false
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults",
+            "apiVersion": "2018-02-14",
+            "name": "[variables('keyVaultName')]",
+            "location": "[variables('location')]",
+            "properties": {
+                "tenantId": "[subscription().tenantId]",
+                "sku": {
+                    "name": "standard",
+                    "family": "A"
+                },
+                "accessPolicies": []
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2018-02-14",
+            "name": "[concat(variables('keyVaultName'), '/SqlPassword')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
+            ],
+            "properties": {
+                "value": "[parameters('sqlAdministratorLoginPassword')]"
+            }
+        },
+       {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('StorageAccountName')]",
+            "location": "[variables('location')]",
+            "dependsOn": [],
+            "tags": {},
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "accessTier": "Hot",
+                "supportsHttpsTrafficOnly": "true",
+                "isHnsEnabled": "true",
+                "largeFileSharesState": "Disabled"
+            },
+            "resources": [
+                {
+                    "type": "blobServices/containers",
+                    "apiVersion": "2018-07-01",
+                    "name": "[concat('default/', variables('defaultDataLakeStorageFilesystemName'))]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Storage/storageAccounts/', variables('StorageAccountName'))]"
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('StorageAccountName'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('StorageAccountName'))]"
+            ],
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                },
+                "deleteRetentionPolicy": {
+                    "enabled": false
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/fileServices",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('StorageAccountName'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('StorageAccountName'))]"
+            ],
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                }
+            }
+        },
+
+        {
+            "type": "Microsoft.Insights/components",
+            "apiVersion": "2018-05-01-preview",
+            "name": "[variables('applicationInsightsName')]",
+            "location": "[if(or(equals(variables('location'),'eastus2'),equals(variables('location'),'westcentralus')),'southcentralus',variables('location'))]",
+            "kind": "web",
+            "properties": {
+                "Application_Type": "web"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('StorageAccountName'), '/default/win-02')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('StorageAccountName'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('StorageAccountName'))]"
+            ],
+            "properties": {
+                "publicAccess": "None"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('blobStorageAccountName'), '/default/staging')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('blobStorageAccountName'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('blobStorageAccountName'))]"
+            ],
+            "properties": {
+                "publicAccess": "None"
+            }
+        },
+        {
+            "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+            "apiVersion": "2020-03-01",
+            "name": "[concat(variables('cosmosDbAccountName'), '/CustomerProfile')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosDbAccountName'))]"
+            ],
+            "properties": {
+                "resource": {
+                    "id": "CustomerProfile"
+                },
+                "options": {}
+            }
+        },
+        {
+            "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+            "apiVersion": "2020-03-01",
+            "name": "[concat(variables('cosmosDbAccountName'), '/CustomerProfile/OnlineUserProfile01')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', variables('cosmosDbAccountName'), 'CustomerProfile')]",
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosDbAccountName'))]"
+            ],
+            "properties": {
+                "resource": {
+                    "id": "OnlineUserProfile01",
+                    "indexingPolicy": {
+                        "indexingMode": "consistent",
+                        "automatic": true,
+                        "includedPaths": [
+                            {
+                                "path": "/*"
+                            }
+                        ],
+                        "excludedPaths": [
+                            {
+                                "path": "/\"_etag\"/?"
+                            }
+                        ]
+                    },
+                    "partitionKey": {
+                        "paths": [
+                            "/userId"
+                        ],
+                        "kind": "Hash"
+                    },
+                    "uniqueKeyPolicy": {
+                        "uniqueKeys": []
+                    },
+                    "conflictResolutionPolicy": {
+                        "mode": "LastWriterWins",
+                        "conflictResolutionPath": "/_ts"
+                    }
+                },
+                "options": {}
+            }
+        },
+        {
+            "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/throughputSettings",
+            "apiVersion": "2020-03-01",
+            "name": "[concat(variables('cosmosDbAccountName'), '/CustomerProfile/OnlineUserProfile01/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers', variables('cosmosDbAccountName'), 'CustomerProfile', 'OnlineUserProfile01')]",
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', variables('cosmosDbAccountName'), 'CustomerProfile')]",
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosDbAccountName'))]"
+            ],
+            "properties": {
+                "resource": {
+                    "throughput": 10000
+                }
+            }
+        },
+        //PostgreeSQL
+        {
+      "type": "Microsoft.DBforPostgreSQL/servers",
+      "apiVersion": "2017-12-01",
+      "name": "[parameters('serverName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "administratorLogin": "[parameters('administratorLogin')]",
+        "administratorLoginPassword": "[parameters('administratorLoginPassword')]",
+        "version": "10",
+        "sslEnforcement": "Enabled",
+        "publicNetworkAccess": "Enabled",
+        "backupRetentionDays": 7,
+        "createMode": "Default",
+        "sku": {
+          "name": "[parameters('skuName')]",
+          "tier": "GeneralPurpose",
+          "capacity": 2
+        },
+        "storageProfile": {
+          "storageMB": 51200
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/servers/databases",
+      "apiVersion": "2020-12-01",
+      "name": "[concat(parameters('serverName'), '/', parameters('databaseName'))]",
+      "properties": {
+        "charset": "UTF8"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/servers', parameters('serverName'))]"
+      ]
+    },
+        {
+            "type": "Microsoft.EventHub/namespaces",
+            "apiVersion": "2018-01-01-preview",
+            "name": "[variables('eventHubNameSpace')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "Standard",
+                "tier": "Standard",
+                "capacity": 1
+            },
+            "properties": {
+                "zoneRedundant": false,
+                "isAutoInflateEnabled": false,
+                "maximumThroughputUnits": 0,
+                "kafkaEnabled": true
+            }
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces/AuthorizationRules",
+            "apiVersion": "2017-04-01",
+            "name": "[concat(variables('eventHubNameSpace'), '/',variables('managedAccessPolicyName'))]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces', variables('eventHubNameSpace'))]"
+            ],
+            "properties": {
+                "rights": [
+                    "Manage",
+                    "Listen",
+                    "Send"
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces/AuthorizationRules",
+            "apiVersion": "2017-04-01",
+            "name": "[concat(variables('eventHubNameSpace'), '/RootManageSharedAccessKey')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces', variables('eventHubNameSpace'))]"
+            ],
+            "properties": {
+                "rights": [
+                    "Listen",
+                    "Manage",
+                    "Send"
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces/networkRuleSets",
+            "apiVersion": "2018-01-01-preview",
+            "name": "[concat(variables('eventHubNamespace'), '/default')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces', variables('eventHubNamespace'))]"
+            ],
+            "properties": {
+                "defaultAction": "Deny",
+                "virtualNetworkRules": [],
+                "ipRules": []
+            }
+        },
+        {
+            "type": "Microsoft.StreamAnalytics/streamingjobs",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('streamAnalyticsName')]",
+            "location": "[variables('location')]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "sku": {
+                    "name": "Standard"
+                },
+                "eventsOutOfOrderPolicy": "Adjust",
+                "outputErrorPolicy": "Stop",
+                "eventsOutOfOrderMaxDelayInSeconds": 0,
+                "eventsLateArrivalMaxDelayInSeconds": 5,
+                "dataLocale": "en-US",
+                "transformation": {
+                    "name": "Transformation",
+                    "properties": {
+                        "streamingUnits": 3,
+                        "query": "SELECT\r\n    *\r\nINTO\r\n    [YourOutputAlias]\r\nFROM\r\n    [YourInputAlias]"
+                    }
+                }
+            }
+        },
+        
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-04-01",
+            "name": "[variables('mlStorageName')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "[variables('mlStorageAccountType')]"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "encryption": {
+                    "services": {
+                        "blob": {
+                            "enabled": true
+                        },
+                        "file": {
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                },
+                "supportsHttpsTrafficOnly": true
+            }
+        },
+        {
+            "type": "Microsoft.ContainerRegistry/registries",
+            "apiVersion": "2019-12-01-preview",
+            "name": "[variables('containerRegistryName')]",
+            "location": "[variables('location')]",
+            "tags": {
+                "displayName": "Container Registry",
+                "container.registry": "[variables('containerRegistryName')]"
+            },
+            "sku": {
+                "name": "Standard",
+                "tier": "Standard"
+            }
+        },
+        {
+            "type": "Microsoft.MachineLearningServices/workspaces",
+            "apiVersion": "2020-03-01",
+            "name": "[variables('mlWorkspaceName')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('mlStorageName'))]",
+                "[resourceId('Microsoft.Insights/components', variables('applicationInsightsName'))]",
+                "[resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))]"
+            ],
+            "sku": {
+                "tier": "Basic",
+                "name": "Basic"
+            },
+            "identity": {
+                "type": "systemAssigned"
+            },
+            "properties": {
+                "friendlyName": "[variables('mlWorkspaceName')]",
+                "storageAccount": "[resourceId('Microsoft.Storage/storageAccounts', variables('mlStorageName'))]",
+                "keyVault": "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+                "applicationInsights": "[resourceId('Microsoft.Insights/components', variables('applicationInsightsName'))]",
+                "containerRegistry": "[resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))]"
+            }
+        },
+        {
+            "type": "Microsoft.DataFactory/factories",
+            "apiVersion": "2018-06-01",
+            "name": "[variables('dataFactoryName')]",
+            "location": "[variables('location')]",
+            "properties": {
+                "repoConfiguration": "[json('null')]",
+                "publicNetworkAccess": "Enabled",
+                "encryption": "[json('null')]"
+            }
+        },
+           {
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "apiVersion": "2020-03-01",
+        "name": "[variables('cosmosDbAccountName')]",
+        "location": "[variables('location')]",
+        "dependsOn": [
+          "[concat('Microsoft.Storage/storageAccounts/', variables('StorageAccountName'), '/blobServices/default/containers/', variables('defaultDataLakeStorageFilesystemName'))]"
+        ],
+        "tags": {
+          "defaultExperience": "Core (SQL)",
+          "hidden-cosmos-mmspecial": "",
+          "CosmosAccountType": "Non-Production"
+        },
+        "kind": "GlobalDocumentDB",
+        "properties": {
+          "publicNetworkAccess": "Enabled",
+          "enableAutomaticFailover": false,
+          "enableMultipleWriteLocations": false,
+          "isVirtualNetworkFilterEnabled": false,
+          "virtualNetworkRules": [],
+          "disableKeyBasedMetadataWriteAccess": false,
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session",
+            "maxIntervalInSeconds": 5,
+            "maxStalenessPrefix": 100
+          },
+          "locations": [
+            {
+              "locationName": "[variables('location')]",
+              "provisioningState": "Succeeded",
+              "failoverPriority": 0,
+              "isZoneRedundant": false
+            }
+          ],
+          "capabilities": []
+        }
+      },
+        {
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "apiVersion": "2015-06-15",
+            "name": "[concat(variables('vmName'),'/', 'winExtension')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Compute/virtualMachines/', variables('vmName'))]"
+            ],
+            "tags": {
+                "displayName": "VM Extension"
+            },
+            "properties": {
+                "publisher": "Microsoft.Compute",
+                "type": "CustomScriptExtension",
+                "typeHandlerVersion": "1.8",
+                "autoUpgradeMinorVersion": true,
+                "settings": {
+                    "fileUris": [
+                        "https://github.com/Priya-Bai-S/MCW-DataAnalytics/blob/main/script1.ps1"
+                    ]
+                },
+                "protectedSettings": {
+                    "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File script1.ps1', variables('cloudlabsCommon'), variables('Enable-CloudLabsEmbeddedShadow'))]"
+                }
+            }
+        }
+    ],
+    "outputs": {
+       "adminUsername": {
+            "type": "String",
+            "value": "admin"
+        },
+        "LABVM Admin Username": {
+            "type": "String",
+            "value": "[parameters('adminUsername')]"
+        },
+        "LABVM Admin Password": {
+            "type": "String",
+            "value": "[parameters('adminPassword')]"
+        },
+        "LABVM DNS Name": {
+            "type": "String",
+            "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses',variables('publicIpAddressName'))).dnsSettings.fqdn]"
+        },
+        "sqlAdministratorLoginPassword": {
+            "type": "String",
+            "value": "[parameters('sqlAdministratorLoginPassword')]"
+        },
+        "postgreserverUrl": {
+           "type": "string",
+           "value": "[variables('postgreserverUrl')]"
+    }
+    }
+}
